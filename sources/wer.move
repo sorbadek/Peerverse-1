@@ -1,5 +1,8 @@
 #[allow(duplicate_alias)]
 module wer::auth {
+    use sui::object::{Self, UID};
+    use sui::transfer;
+    use sui::tx_context::{Self, TxContext};
     use sui::table::{Self, Table};
     use sui::event;
     use sui::clock::{Self, Clock};
@@ -7,7 +10,7 @@ module wer::auth {
     use sui::bcs;
     use std::string::{Self, String};
     use std::vector;
-    use std::option;
+    use std::option::{Self, Option};
 
     const EInvalidZKProof: u64 = 1;
     const EUserNotRegistered: u64 = 2;
@@ -543,7 +546,133 @@ module wer::auth {
         user_address: address,
         amount: u64,
         timestamp: u64
-}
+    }
 
+    public struct Content has key, store {
+        id: UID,
+        creator: address,
+        content_type: u8, // 1: Course, 2: Tutorial, 3: Resource
+        title: String,
+        description: String,
+        xp_reward: u64,
+        created_at: u64,
+        is_approved: bool,
+        total_engagements: u64
+    }
+
+    public struct ContentEngagement has copy, drop {
+        content_id: address,
+        user_address: address,
+        engagement_type: u8, // 1: View, 2: Like, 3: Comment
+        timestamp: u64
+    }
+
+    public struct Achievement has key, store {
+        id: UID,
+        user_address: address,
+        achievement_type: u8,
+        title: String,
+        description: String,
+        xp_bonus: u64,
+        earned_at: u64
+    }
+
+    public entry fun create_content(
+        registry: &mut AuthRegistry,
+        content_type: u8,
+        title: String,
+        description: String,
+        xp_reward: u64,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        let creator = tx_context::sender(ctx);
+        assert!(table::contains(&registry.users, creator), EUserNotRegistered);
+        
+        let content = Content {
+            id: object::new(ctx),
+            creator,
+            content_type,
+            title,
+            description,
+            xp_reward,
+            created_at: clock::timestamp_ms(clock),
+            is_approved: false,
+            total_engagements: 0
+        };
+        
+        // Transfer content to creator
+        transfer::transfer(content, creator);
+    }
+
+    public entry fun engage_with_content(
+        registry: &mut AuthRegistry,
+        content_id: address,
+        engagement_type: u8,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        let user_address = tx_context::sender(ctx);
+        assert!(table::contains(&registry.users, user_address), EUserNotRegistered);
+        
+        event::emit(ContentEngagement {
+            content_id,
+            user_address,
+            engagement_type,
+            timestamp: clock::timestamp_ms(clock)
+        });
+        
+        // Award XP for engagement
+        let xp_reward = if (engagement_type == 1) { 5 } // View
+        else if (engagement_type == 2) { 10 } // Like
+        else { 15 }; // Comment
+        
+        let user_profile = table::borrow_mut(&mut registry.users, user_address);
+        user_profile.xp_balance = user_profile.xp_balance + xp_reward;
+    }
+
+    public entry fun award_achievement(
+        registry: &mut AuthRegistry,
+        user_address: address,
+        achievement_type: u8,
+        title: String,
+        description: String,
+        xp_bonus: u64,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        assert!(tx_context::sender(ctx) == registry.admin, EUnauthorizedAccess);
+        assert!(table::contains(&registry.users, user_address), EUserNotRegistered);
+        
+        let achievement = Achievement {
+            id: object::new(ctx),
+            user_address,
+            achievement_type,
+            title,
+            description,
+            xp_bonus,
+            earned_at: clock::timestamp_ms(clock)
+        };
+        
+        // Award XP bonus
+        let user_profile = table::borrow_mut(&mut registry.users, user_address);
+        user_profile.xp_balance = user_profile.xp_balance + xp_bonus;
+        
+        // Transfer achievement to user
+        transfer::transfer(achievement, user_address);
+    }
+
+    public entry fun approve_content(
+        registry: &mut AuthRegistry,
+        content: &mut Content,
+        ctx: &mut TxContext
+    ) {
+        assert!(tx_context::sender(ctx) == registry.admin, EUnauthorizedAccess);
+        content.is_approved = true;
+        
+        // Award XP to content creator
+        let creator_profile = table::borrow_mut(&mut registry.users, content.creator);
+        creator_profile.xp_balance = creator_profile.xp_balance + 50; // Bonus for approved content
+    }
 } // Close the module
 

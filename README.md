@@ -45,7 +45,7 @@ The main smart contract (`auth.move`) contains the following key components:
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
+git clone [https://github.com/sorbadek/Peerverse-1]
 ```
 
 2. Navigate to the project directory:
@@ -57,14 +57,6 @@ cd PeerVerse
 ```bash
 sui move build
 ```
-
-### Testing
-
-Run the test suite:
-```bash
-sui move test
-```
-
 ## Core Functions
 
 ### User Management
@@ -110,8 +102,5 @@ The system emits various events for tracking and auditing:
 
 ## License
 
-[Add your license information here]
+MIT LICENCE 
 
-## Contributing
-
-[Add contribution guidelines here]
